@@ -130,3 +130,55 @@ class Client:
                         yield changed[prop][1]
                     elif prop in invalidated:
                         yield None
+
+
+class MagicClient(Client):
+    async def _iter_paths(self, name, path=''):
+        schema = await self.introspect(name, path or '/')
+        if schema.interfaces:
+            yield path or '/'
+        for child in schema.nodes:
+            async for p in self._iter_paths(name, f'{path}/{child}'):
+                yield p
+
+    async def _guess_iface(self, name, key, value, path, iface=None):
+        if iface:
+            return iface
+        schema = await self.introspect(name, path)
+        for iface, s in schema.interfaces.items():
+            if value in getattr(s, key):
+                return iface
+        raise ValueError((name, key, value, path))
+
+    async def _guess_path(self, name, key, value, path=None, iface=None):
+        if path:
+            return path, await self._guess_iface(name, key, value, path, iface)
+        async for path in self._iter_paths(name):
+            try:
+                return path, await self._guess_iface(name, key, value, path, iface)
+            except ValueError:
+                pass
+        raise ValueError((name, key, value))
+
+    async def call(self, name, path, iface, method, params=(), sig=None):
+        path, iface = await self._guess_path(name, 'methods', method, path, iface)
+        return await super().call(name, path, iface, method, params, sig)
+
+    @contextlib.asynccontextmanager
+    async def subscribe_signal(self, name, path, iface, signal):
+        path, iface = await self._guess_path(name, 'signals', signal, path, iface)
+        async with super().subscribe_signal(name, path, iface, signal) as queue:
+            yield queue
+
+    async def get_property(self, name, path, iface, prop):
+        path, iface = await self._guess_path(name, 'properties', prop, path, iface)
+        return await super().get_property(name, path, iface, prop)
+
+    async def set_property(self, name, path, iface, prop, value, sig=None):
+        path, iface = await self._guess_path(name, 'properties', prop, path, iface)
+        await super().set_property(name, path, iface, prop, value, sig)
+
+    async def watch_property(self, name, path, iface, prop):
+        path, iface = await self._guess_path(name, 'properties', prop, path, iface)
+        async for value in super().watch_property(name, path, iface, prop):
+            yield value

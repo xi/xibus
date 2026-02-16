@@ -1,6 +1,15 @@
 from .schema import Schema
 
 
+class Proxy:
+    def __init__(self, client, name, path=None, iface=None):
+        self.client = client
+        self.defaults = (name, path, iface)
+
+    async def call(self, method, params=(), sig=None):
+        return await self.client.call(*self.defaults, method, params, sig)
+
+
 class Client:
     def __init__(self, con):
         self.con = con

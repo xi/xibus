@@ -1,6 +1,7 @@
 import contextlib
 
 from .client import Client
+from .client import Proxy  # noqa
 from .connection import DBusError  # noqa
 from .connection import get_connection
 

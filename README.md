@@ -72,6 +72,61 @@ async def amain():
 asyncio.run(amain())
 ```
 
+## Motivation
+
+This library was born from my frustration with dbus. I wanted to see if that
+frustration was caused by bad library design or if it was inherent in the
+protocol.
+
+### Verbosity
+
+`org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop
+org.freedesktop.portal.Settings ReadOne` is extremely verbose and redundant. An
+equivalent HTTP endpoint would probably be called
+`desktop.portal.freedesktop.org/settings/ReadOne`, which is so much better.
+Sure, namespacing has its benefits. But this is just excessive.
+
+This is mostly an issue in the protocol. Applications could make this slightly
+better by choosing `/` as the path for their primary object, but even that is
+discouraged by the spec.
+
+`GDBusProxy` is also more of a workaround than a solution. The fact that it
+is a proxy for interfaces rather than objects is an indicator that those two
+concepts are at least partially redundant.
+
+My workaround here is to use the first matching path / interface that can be
+found. This has a performance penalty and is brittle (e.g. if conflicting
+interfaces are added later on), so this is not a real solution either.
+
+IMHO the real solution would be to enforce `/` as the primary object path and
+to do away with interfaces. In practice there are not so many interfaces on the
+same object that collisions are a real issue.
+
+### Signatures
+
+In order to encode a dbus message, you need to know its type signature. In the
+glib implementation, the caller must provide that signature. I added the option
+to omit the signature, in which case it is received via introspection. Deriving
+the signature from python types is not easily possible because it is unclear
+how to differentiate `INT32` from `UINT64` or `STRING` from `OBJECT_PATH`.
+
+A special case of this are variant types, where the type is only known at
+runtime. I chose to represent them as simple `(signature, value)` tuples.
+
+### Custom wire format
+
+The most complex part of this library is the implementation of the custom wire
+format. This would be much easier if dbus would reuse an existing format like
+MessagePack, CBOR, or even JSON. (Each of these of course come with their own
+pros and cons.)
+
+### Layers
+
+That said, I really like how the different layers of this protocol are stacked
+on top of each other. Once you have the wire format, you can build messages on
+top of that. Then you can build method calls and signals on top of messages.
+Finally, you can build introspection and property access on top of method calls.
+
 ## Links
 
 -   [dbus-next](https://github.com/altdesktop/python-dbus-next) and its forks

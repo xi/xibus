@@ -202,6 +202,34 @@ class Connection:
 
         await self.send(*msg.marshal())
 
+    async def send_reply(self, call, handler):
+        try:
+            sig, body = await handler(call)
+            reply = Msg(
+                MsgType.METHOD_RETURN,
+                self.get_serial(),
+                reply_serial=call.serial,
+                destination=call.sender,
+                body=body,
+                sig=sig,
+            )
+        except Exception as e:
+            # TODO: better error conversion
+            # (what is the quivalent of 404 not found?)
+            reply = Msg(
+                MsgType.ERROR,
+                self.get_serial(),
+                reply_serial=call.serial,
+                destination=call.sender,
+                error_name='org.freedesktop.DBus.Error.AccessDenied',
+                body=(str(e),),
+                sig='s',
+            )
+
+        if not call.flags & MsgFlag.NO_REPLY_EXPECTED:
+            await self.send(*reply.marshal())
+
+
 def get_connection(bus):
     if bus == 'session':
         addr = os.getenv(
